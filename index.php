@@ -53,6 +53,7 @@ $isConfigured = !empty($triggerKey);
 // 2. Handle Logout
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
+    setcookie('cf_auth_cookie', '', time() - 3600, '/', '', false, true);
     header("Location: " . strtok($_SERVER["REQUEST_URI"], '?'));
     exit;
 }
@@ -63,6 +64,11 @@ $loginError = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['key'])) {
     if ($isConfigured && hash_equals($triggerKey, $_POST['key'])) {
         $_SESSION['cf_auth'] = true;
+        
+        // Secure HTTP-Only Cookie Fallback in case PHP Session is misconfigured/fails to save
+        $cookieValue = hash('sha256', $triggerKey . $_SERVER['HTTP_USER_AGENT']);
+        setcookie('cf_auth_cookie', $cookieValue, time() + 86400, '/', '', false, true);
+        
         // Redirect to prevent form resubmission on refresh
         header("Location: ?action=status");
         exit;
@@ -71,8 +77,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['key'])) {
     }
 }
 
-// 4. Verify Authentication Session
-$isAuthenticated = isset($_SESSION['cf_auth']) && $_SESSION['cf_auth'] === true;
+// 4. Verify Authentication Session or Cookie Fallback
+$isAuthenticated = (isset($_SESSION['cf_auth']) && $_SESSION['cf_auth'] === true)
+    || (isset($_COOKIE['cf_auth_cookie']) && hash_equals(hash('sha256', $triggerKey . $_SERVER['HTTP_USER_AGENT']), $_COOKIE['cf_auth_cookie']));
 
 $action = $_GET['action'] ?? 'status';
 $allowedActions = ['status', 'on', 'off', 'purge'];
@@ -425,7 +432,7 @@ if ($isAuthenticated) {
                 <h2 class="auth-title">Access Verification</h2>
                 <p class="auth-desc">This control panel is private. Enter your Access Key to access CDN controls.</p>
                 
-                <form method="POST" class="form-group">
+                <form method="POST" action="index.php" class="form-group">
                     <input type="password" name="key" placeholder="Enter Access Key" required autocomplete="off" class="form-input">
                     <button type="submit" class="btn btn-primary">Verify Access</button>
                 </form>
