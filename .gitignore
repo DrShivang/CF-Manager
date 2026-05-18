@@ -1,0 +1,3 @@
+# Ignore secret configurations
+.secrets
+.env.local
