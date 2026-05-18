@@ -1,6 +1,6 @@
 <?php
 /**
- * DG AutoEdge — Cloudflare Cache & Development Control Panel
+ * Cloudflare Cache & Development Control Panel
  * 
  * Secure web interface to interact with cf-helper.py.
  * Requires a CLOUDFLARE_TRIGGER_KEY defined in .secrets or .env.local to access.
@@ -41,6 +41,12 @@ $triggerKey = $secrets['CLOUDFLARE_TRIGGER_KEY']
            ?? $envLocal['CLOUDFLARE_TRIGGER_KEY'] 
            ?? $envBase['CLOUDFLARE_TRIGGER_KEY'] 
            ?? '';
+
+// Retrieve project name
+$projectName = $secrets['PROJECT_NAME'] 
+            ?? $envLocal['PROJECT_NAME'] 
+            ?? $envBase['PROJECT_NAME'] 
+            ?? 'CF Cache Manager';
 
 $isConfigured = !empty($triggerKey);
 
@@ -112,7 +118,7 @@ if ($isAuthenticated) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DG AutoEdge | CDN Cache Control</title>
+    <title><?= htmlspecialchars($projectName) ?> | CDN Cache Control</title>
     <meta name="robots" content="noindex, nofollow">
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -395,7 +401,7 @@ if ($isAuthenticated) {
     <div class="dashboard-container">
         <!-- Dashboard Header -->
         <div class="logo-section">
-            <h1 class="logo-title">DG <span>AutoEdge</span></h1>
+            <h1 class="logo-title"><?= htmlspecialchars($projectName) ?></h1>
             <div class="logo-sub">Cloudflare Edge CDN Control</div>
         </div>
 
