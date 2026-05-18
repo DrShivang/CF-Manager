@@ -1,0 +1,13 @@
+# Prevent Directory Indexes (disallow viewing files in folder)
+Options -Indexes
+
+# Protect .secrets and configuration templates from direct HTTP access
+<FilesMatch "^\.(secrets|env|htaccess).*$">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
+
+<FilesMatch "^(README\.md|\.secrets\.example)$">
+    Order deny,allow
+    Deny from all
+</FilesMatch>
