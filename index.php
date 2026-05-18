@@ -37,6 +37,15 @@ function loadEnvSecrets($filepath) {
     return $env;
 }
 
+// Activity Logging Helper
+function logActivity($action, $status, $details) {
+    $logFile = __DIR__ . '/activity.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'Unknown';
+    $logLine = sprintf("[%s] [IP: %s] [Action: %s] [Status: %s] [Details: %s]\n", $timestamp, $ip, $action, $status, $details);
+    @file_put_contents($logFile, $logLine, FILE_APPEND);
+}
+
 // 1. Load Configurations
 $secrets = loadEnvSecrets(__DIR__ . '/.secrets');
 $envLocal = loadEnvSecrets(__DIR__ . '/.env.local');
@@ -58,6 +67,7 @@ $isConfigured = !empty($triggerKey);
 
 // 2. Handle Logout
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    logActivity('AUTH_LOGOUT', 'SUCCESS', 'Panel locked / session terminated');
     session_destroy();
     setcookie('cf_auth_cookie', '', time() - 3600, '/', '', false, true);
     header("Location: " . strtok($_SERVER["REQUEST_URI"], '?'));
@@ -75,11 +85,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['key'])) {
         $cookieValue = hash('sha256', $triggerKey . $_SERVER['HTTP_USER_AGENT']);
         setcookie('cf_auth_cookie', $cookieValue, time() + 86400, '/', '', false, true);
         
+        logActivity('AUTH_LOGIN', 'SUCCESS', 'Authenticated using Access Key');
+        
         // Redirect to prevent form resubmission on refresh
         header("Location: ?action=status");
         exit;
     } else {
         $loginError = "Invalid Access Key.";
+        logActivity('AUTH_LOGIN', 'FAILED', 'Incorrect Access Key attempt');
     }
 }
 
@@ -88,9 +101,16 @@ $isAuthenticated = (isset($_SESSION['cf_auth']) && $_SESSION['cf_auth'] === true
     || (isset($_COOKIE['cf_auth_cookie']) && hash_equals(hash('sha256', $triggerKey . $_SERVER['HTTP_USER_AGENT']), $_COOKIE['cf_auth_cookie']));
 
 $action = $_GET['action'] ?? 'status';
-$allowedActions = ['status', 'on', 'off', 'purge'];
+$allowedActions = ['status', 'on', 'off', 'purge', 'clear_logs'];
 if (!in_array($action, $allowedActions)) {
     $action = 'status';
+}
+
+if ($isAuthenticated && $action === 'clear_logs') {
+    @file_put_contents(__DIR__ . '/activity.log', '');
+    logActivity('CLEAR_LOGS', 'SUCCESS', 'Activity audit logs cleared');
+    header("Location: ?action=status");
+    exit;
 }
 
 // Convert ANSI escape codes to HTML styled spans for terminal rendering
@@ -114,15 +134,30 @@ function ansiToHtml($text) {
 
 // 5. Execute Script if Authenticated
 $terminalOutput = '';
-if ($isAuthenticated) {
+if ($isAuthenticated && $action !== 'clear_logs') {
     $scriptPath = __DIR__ . '/cf-helper.py';
     if (!file_exists($scriptPath)) {
         $terminalOutput = "Error: cf-helper.py script not found at $scriptPath";
+        logActivity(strtoupper($action), 'ERROR', 'cf-helper.py CLI file not found');
     } elseif (!is_executable($scriptPath)) {
         $terminalOutput = "Error: cf-helper.py is not executable. Please run 'chmod +x cf-helper.py'.";
+        logActivity(strtoupper($action), 'ERROR', 'cf-helper.py is not executable');
     } else {
+        // Forward client IP to the Python execution environment for correct logging
+        putenv("REMOTE_ADDR=" . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown'));
         $cmd = escapeshellcmd($scriptPath) . ' ' . escapeshellarg($action);
         $terminalOutput = shell_exec($cmd);
+    }
+}
+
+// 6. Read Activity Audit Logs
+$logEntries = [];
+$logFile = __DIR__ . '/activity.log';
+if ($isAuthenticated && file_exists($logFile)) {
+    $lines = file($logFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    if ($lines) {
+        $lines = array_reverse($lines);
+        $logEntries = array_slice($lines, 0, 30);
     }
 }
 ?>
@@ -407,6 +442,85 @@ if ($isAuthenticated) {
             font-family: monospace;
             font-size: 0.85rem;
         }
+
+        /* Activity Log Panel styling */
+        .logs-window {
+            background: var(--card-dark);
+            border: 1px solid var(--border-dark);
+            border-radius: 16px;
+            padding: 24px;
+            margin-top: 32px;
+            backdrop-filter: blur(12px);
+        }
+        
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-dark);
+            padding-bottom: 12px;
+        }
+        
+        .logs-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .logs-body {
+            max-height: 250px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-right: 8px;
+        }
+        
+        .logs-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .logs-body::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        .log-row {
+            padding: 6px 12px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.15);
+            border-left: 3px solid #64748b;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .log-row.success { border-left-color: var(--green); }
+        .log-row.failed { border-left-color: var(--red); }
+        .log-row.error { border-left-color: #f59e0b; }
+        
+        .log-badge {
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+        
+        .log-badge.cli { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+        .log-badge.web { background: rgba(168, 85, 247, 0.15); color: #c084fc; }
+        .log-badge.status-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+        .log-badge.status-err { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+        
+        .log-time { color: var(--text-muted); font-size: 0.8rem; }
+        .log-details { color: #e2e8f0; flex-grow: 1; word-break: break-all; }
     </style>
 </head>
 <body>
@@ -486,6 +600,61 @@ if ($isAuthenticated) {
                 <p style="font-size:0.85rem; color:var(--text-muted);">
                     Authorized Session &bull; <a href="?action=logout" style="color:var(--primary); text-decoration:none; font-weight:600; transition:color 0.2s;" onmouseover="this.style.color='var(--primary-hover)'" onmouseout="this.style.color='var(--primary)'">Lock Panel</a>
                 </p>
+            </div>
+
+            <!-- Audit & Activity Logs Panel -->
+            <div class="logs-window">
+                <div class="logs-header">
+                    <h3 class="logs-title">
+                        <svg style="width:18px;height:18px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        Audit & Activity Logs
+                    </h3>
+                    <?php if (!empty($logEntries)): ?>
+                        <a href="?action=clear_logs" onclick="return confirm('Are you sure you want to clear the entire activity audit log?');" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.8rem; display:flex; align-items:center; gap:4px; border: 1px solid var(--border-dark); border-radius: 8px; background: rgba(255,255,255,0.02); color: var(--text-main); text-decoration: none; font-family: 'Space Grotesk', sans-serif; transition: all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.borderColor='var(--red)';" onmouseout="this.style.background='rgba(255,255,255,0.02)'; this.style.borderColor='var(--border-dark)';">
+                            <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Clear Logs
+                        </a>
+                    <?php endif; ?>
+                </div>
+                <div class="logs-body">
+                    <?php if (empty($logEntries)): ?>
+                        <p style="color:var(--text-muted); font-size:0.9rem; font-style:italic; text-align:center; padding: 20px 0;">No logs found. Perform actions or log in to generate entries.</p>
+                    <?php else: ?>
+                        <?php foreach ($logEntries as $entry): ?>
+                            <?php
+                            // Parse standard entry format:
+                            // [2026-05-19 02:50:42] [IP: 12.34.56.78] [Action: PURGE] [Status: SUCCESS] [Details: Edge cache fully purged]
+                            preg_match('/^\[(.*?)\] \[IP: (.*?)\] \[Action: (.*?)\] \[Status: (.*?)\] \[Details: (.*?)\]$/', $entry, $matches);
+                            if (count($matches) === 6) {
+                                list(, $timestamp, $ip, $actionTag, $statusTag, $detailsMsg) = $matches;
+                                $isSuccess = strtolower($statusTag) === 'success';
+                                $isFailed = strtolower($statusTag) === 'failed';
+                                $isError = strtolower($statusTag) === 'error';
+                                $rowClass = $isSuccess ? 'success' : ($isFailed ? 'failed' : ($isError ? 'error' : ''));
+                                $ipType = strtolower($ip) === 'cli' ? 'cli' : 'web';
+                                $statusClass = $isSuccess ? 'status-ok' : 'status-err';
+                            } else {
+                                // Fallback for unstructured entry lines
+                                $timestamp = '';
+                                $ip = 'System';
+                                $actionTag = 'LOG';
+                                $statusTag = 'INFO';
+                                $detailsMsg = $entry;
+                                $rowClass = '';
+                                $ipType = 'web';
+                                $statusClass = 'status-ok';
+                            }
+                            ?>
+                            <div class="log-row <?= $rowClass ?>">
+                                <span class="log-time"><?= htmlspecialchars($timestamp) ?></span>
+                                <span class="log-badge <?= $ipType ?>"><?= htmlspecialchars($ip) ?></span>
+                                <span class="log-badge" style="background:rgba(255,255,255,0.06); color:#f8fafc; font-weight:600;"><?= htmlspecialchars($actionTag) ?></span>
+                                <span class="log-badge <?= $statusClass ?>"><?= htmlspecialchars($statusTag) ?></span>
+                                <span class="log-details"><?= htmlspecialchars($detailsMsg) ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
             </div>
         <?php endif; ?>
     </div>

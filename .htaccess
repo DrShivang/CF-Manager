@@ -4,8 +4,8 @@
     Options -Indexes
 </IfModule>
 
-# Protect sensitive config files and dotfiles from direct HTTP web access
-<FilesMatch "^\.(secrets|env|htaccess|git).*$">
+# Protect sensitive config files, logs, and dotfiles from direct HTTP web access
+<FilesMatch "^\.(secrets|env|htaccess|git).*$|^activity\.log$|.*\.log$">
     <IfModule mod_authz_core.c>
         Require all denied
     </IfModule>

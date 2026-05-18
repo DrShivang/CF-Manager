@@ -44,6 +44,20 @@ def get_config():
     zone_id = os.environ.get("CLOUDFLARE_ZONE_ID") or env_secrets.get("CLOUDFLARE_ZONE_ID") or env_local.get("CLOUDFLARE_ZONE_ID") or env_base.get("CLOUDFLARE_ZONE_ID")
     return token, zone_id
 
+def log_activity(action, status, details):
+    log_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "activity.log")
+    import datetime
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    ip = os.environ.get("REMOTE_ADDR", "CLI")
+    # Clean logs of colors/HTML for readability
+    details_clean = details.replace("\033[92m", "").replace("\033[93m", "").replace("\033[91m", "").replace("\033[94m", "").replace("\033[96m", "").replace("\033[1m", "").replace("\033[0m", "")
+    log_line = f"[{timestamp}] [IP: {ip}] [Action: {action.upper()}] [Status: {status}] [Details: {details_clean}]\n"
+    try:
+        with open(log_file, "a") as f:
+            f.write(log_line)
+    except Exception:
+        pass
+
 def make_request(url, method="GET", data=None, token=None):
     if not token:
         print(f"{RED}{BOLD}Error:{RESET} Cloudflare API Token is missing.")
@@ -67,12 +81,16 @@ def make_request(url, method="GET", data=None, token=None):
         try:
             err_json = json.loads(err_body)
             messages = ", ".join([err.get("message", "") for err in err_json.get("errors", [])])
-            print(f"{RED}{BOLD}API Error ({e.code}):{RESET} {messages or err_body}")
+            err_msg = messages or err_body
+            print(f"{RED}{BOLD}API Error ({e.code}):{RESET} {err_msg}")
+            log_activity("API_REQUEST", "FAILED", f"HTTP {e.code}: {err_msg}")
         except Exception:
             print(f"{RED}{BOLD}HTTP Error ({e.code}):{RESET} {e.reason}")
+            log_activity("API_REQUEST", "FAILED", f"HTTP {e.code}: {e.reason}")
         sys.exit(1)
     except Exception as e:
         print(f"{RED}{BOLD}Connection Error:{RESET} {str(e)}")
+        log_activity("API_REQUEST", "FAILED", f"Connection Error: {str(e)}")
         sys.exit(1)
 
 def show_status(token, zone_id):
@@ -90,8 +108,10 @@ def show_status(token, zone_id):
         hours, mins = divmod(mins, 60)
         print(f"Status:         {GREEN}{BOLD}ENABLED (ON){RESET}")
         print(f"Time Remaining: {YELLOW}{hours}h {mins}m {secs}s{RESET}")
+        log_activity("STATUS", "SUCCESS", f"Development Mode is ENABLED. Time remaining: {hours}h {mins}m {secs}s")
     else:
         print(f"Status:         {RED}{BOLD}DISABLED (OFF){RESET}")
+        log_activity("STATUS", "SUCCESS", "Development Mode is DISABLED (OFF)")
     print("-" * 45 + "\n")
 
 def toggle_dev_mode(token, zone_id, value):
@@ -102,9 +122,11 @@ def toggle_dev_mode(token, zone_id, value):
     if res.get("success"):
         status_str = f"{GREEN}ON{RESET}" if value == "on" else f"{RED}OFF{RESET}"
         print(f"{GREEN}{BOLD}Success:{RESET} Development mode successfully turned {status_str}!")
+        log_activity(f"DEV_MODE_{value}", "SUCCESS", f"Development mode turned {value.upper()}")
         show_status(token, zone_id)
     else:
         print(f"{RED}{BOLD}Failed to set Development Mode.{RESET}")
+        log_activity(f"DEV_MODE_{value}", "FAILED", "API response indicates failure")
 
 def purge_cache(token, zone_id):
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache"
@@ -113,8 +135,10 @@ def purge_cache(token, zone_id):
     
     if res.get("success"):
         print(f"{GREEN}{BOLD}Success:{RESET} Cloudflare edge cache has been fully purged!")
+        log_activity("PURGE", "SUCCESS", "Edge cache fully purged")
     else:
         print(f"{RED}{BOLD}Failed to purge cache.{RESET}")
+        log_activity("PURGE", "FAILED", "API response indicates failure")
 
 def print_help():
     print(f"""{BOLD}Cloudflare Development CLI Helper{RESET}
