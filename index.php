@@ -3,7 +3,7 @@
  * Cloudflare Cache & Development Control Panel
  * 
  * Secure web interface to interact with cf-helper.py.
- * Requires a CLOUDFLARE_TRIGGER_KEY defined in .secrets or .env.local to access.
+ * Requires a CF_ACCESS_KEY defined in .secrets or .env.local to access.
  */
 session_start();
 
@@ -37,9 +37,9 @@ $envLocal = loadEnvSecrets(__DIR__ . '/.env.local');
 $envBase = loadEnvSecrets(__DIR__ . '/.env');
 
 // Retrieve trigger key
-$triggerKey = $secrets['CLOUDFLARE_TRIGGER_KEY'] 
-           ?? $envLocal['CLOUDFLARE_TRIGGER_KEY'] 
-           ?? $envBase['CLOUDFLARE_TRIGGER_KEY'] 
+$triggerKey = $secrets['CF_ACCESS_KEY'] 
+           ?? $envLocal['CF_ACCESS_KEY'] 
+           ?? $envBase['CF_ACCESS_KEY'] 
            ?? '';
 
 // Retrieve project name
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['key'])) {
         header("Location: ?action=status");
         exit;
     } else {
-        $loginError = "Invalid Security Key.";
+        $loginError = "Invalid Access Key.";
     }
 }
 
@@ -408,25 +408,25 @@ if ($isAuthenticated) {
         <?php if (!$isConfigured): ?>
             <!-- Setup Warning Screen -->
             <div class="warning-banner">
-                <div class="warning-title">⚠️ Action Required: Security Key Missing</div>
-                To access this control panel, you must configure a secure access bypass key. Add the <code>CLOUDFLARE_TRIGGER_KEY</code> variable to your <code>.secrets</code> file:
+                <div class="warning-title">⚠️ Action Required: Access Key Missing</div>
+                To access this control panel, you must configure a secure access key. Add the <code>CF_ACCESS_KEY</code> variable to your <code>.secrets</code> file:
                 <div style="margin-top: 10px; font-family: monospace; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-                    CLOUDFLARE_TRIGGER_KEY=your_secure_bypass_key
+                    CF_ACCESS_KEY=your_secure_access_key
                 </div>
             </div>
             <div class="auth-card" style="margin-top: 20px;">
-                <p class="auth-desc">Once configured, reload this page to access the bypass trigger options.</p>
+                <p class="auth-desc">Once configured, reload this page to access the CDN controls.</p>
             </div>
 
         <?php elseif (!$isAuthenticated): ?>
             <!-- Authentication Gate Screen -->
             <div class="auth-card">
                 <div class="auth-icon">🔒</div>
-                <h2 class="auth-title">Security Verification</h2>
-                <p class="auth-desc">This control panel is private. Enter your security key to access CDN controls.</p>
+                <h2 class="auth-title">Access Verification</h2>
+                <p class="auth-desc">This control panel is private. Enter your Access Key to access CDN controls.</p>
                 
                 <form method="POST" class="form-group">
-                    <input type="password" name="key" placeholder="Enter Security Key" required autocomplete="off" class="form-input">
+                    <input type="password" name="key" placeholder="Enter Access Key" required autocomplete="off" class="form-input">
                     <button type="submit" class="btn btn-primary">Verify Access</button>
                 </form>
                 <?php if ($loginError): ?>

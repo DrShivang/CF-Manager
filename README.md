@@ -14,8 +14,8 @@ Create a local configuration file named `.secrets` in the root of this folder:
 CLOUDFLARE_API_TOKEN=your_api_token_here
 CLOUDFLARE_ZONE_ID=your_zone_id_here
 
-# Secret security bypass key to access the index.php web control panel
-CLOUDFLARE_TRIGGER_KEY=your_secret_trigger_key_here
+# Secret security access key to authorize control panel sessions
+CF_ACCESS_KEY=your_secret_access_key_here
 
 # (Optional) Customize the header title of your web dashboard
 PROJECT_NAME=My Project Name
@@ -24,7 +24,7 @@ PROJECT_NAME=My Project Name
 ## Usage
 
 ### Web Interface
-Navigate to the `cf-manager` directory in your browser (e.g., `http://your-domain.com/cf-manager/`). You will be prompted to enter the `CLOUDFLARE_TRIGGER_KEY` to authenticate securely.
+Navigate to the `cf-manager` directory in your browser (e.g., `http://your-domain.com/cf-manager/`). You will be prompted to enter the `CF_ACCESS_KEY` to authenticate securely.
 
 ### CLI Interface
 Run the python script directly from the terminal:

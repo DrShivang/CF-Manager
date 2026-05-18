@@ -1,13 +1,27 @@
 # Prevent Directory Indexes (disallow viewing files in folder)
-Options -Indexes
+# Wrapped in <IfModule> to prevent 500 Internal Server Errors on restrictive hosts.
+<IfModule mod_autoindex.c>
+    Options -Indexes
+</IfModule>
 
-# Protect .secrets and configuration templates from direct HTTP access
-<FilesMatch "^\.(secrets|env|htaccess).*$">
-    Order deny,allow
-    Deny from all
+# Protect sensitive config files and dotfiles from direct HTTP web access
+<FilesMatch "^\.(secrets|env|htaccess|git).*$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
+# Protect documentation and templates from public browser requests
 <FilesMatch "^(README\.md|\.secrets\.example)$">
-    Order deny,allow
-    Deny from all
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
 </FilesMatch>
